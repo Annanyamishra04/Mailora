@@ -1,0 +1,133 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ==========================================================================
+   AI Mail Studio — design tokens
+   A writing instrument, not an AI toy: warm paper / ink, one inked teal for
+   action, a wax-seal gold reserved for favorites and a single landing accent.
+   ========================================================================== */
+
+:root {
+  --paper: #f7f7f3;
+  --paper-raised: #ffffff;
+  --ink: #16181f;
+  --ink-soft: #4b5160;
+  --ink-faint: #8b8f9c;
+  --line: #e4e2da;
+  --line-strong: #d3d0c4;
+
+  --teal: #1f6f6b;
+  --teal-strong: #17524f;
+  --teal-tint: #e4efee;
+
+  --gold: #b9853b;
+  --gold-tint: #f6ecd9;
+
+  --danger: #b23b3b;
+  --danger-tint: #f7e6e6;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.dark {
+  --paper: #12141a;
+  --paper-raised: #181b22;
+  --ink: #f3f2ec;
+  --ink-soft: #a8adba;
+  --ink-faint: #666b78;
+  --line: #262933;
+  --line-strong: #343844;
+
+  --teal: #4fa39d;
+  --teal-strong: #6fc0b9;
+  --teal-tint: #1a2b2a;
+
+  --gold: #d3a35f;
+  --gold-tint: #2a2317;
+
+  --danger: #d97a7a;
+  --danger-tint: #2c1c1c;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-teal: var(--teal);
+  --color-teal-strong: var(--teal-strong);
+  --color-teal-tint: var(--teal-tint);
+
+  --color-gold: var(--gold);
+  --color-gold-tint: var(--gold-tint);
+
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--teal-tint);
+  color: var(--teal-strong);
+}
+
+/* Visible keyboard focus everywhere, no exceptions. */
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Thin, quiet scrollbars that match the paper/ink system. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
