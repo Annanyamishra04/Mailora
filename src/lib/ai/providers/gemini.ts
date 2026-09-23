@@ -95,65 +95,72 @@ function parseRetryAfter(header: string | null): number {
   return DEFAULT_RETRY_AFTER_SECONDS;
 }
  
-/**
- * Gemini's free tier occasionally returns 503 "the model is currently
- * experiencing high demand" — a transient overload on Google's side, not a
- * problem with the request. One quick, silent retry clears most of these
- * without the user having to click "Generate" again. We deliberately retry
- * only this one specific, fast-failing case (never on timeout/network
- * errors, which already ate most of the 20s budget) so a retry can't push
- * the route past its 30s `maxDuration`.
- */
-const OVERLOAD_RETRY_DELAY_MS = 1200;
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1500;
  
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
  
-function isOverloadError(error: unknown): boolean {
-  return (
-    error instanceof AiError &&
-    error.code === "provider_error" &&
-    typeof error.cause === "string" &&
-    /Gemini responded with 503/.test(error.cause) &&
-    /"status":\s*"UNAVAILABLE"/.test(error.cause)
-  );
+async function fetchWithRetry(url: string, apiKey: string, body: string): Promise<Response> {
+  let lastResponse: Response | null = null;
+ 
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+ 
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        signal: controller.signal,
+        body,
+      });
+      clearTimeout(timeout);
+ 
+      // 503 (overloaded) and 429 (rate limited) are transient - worth retrying.
+      // Everything else (bad key, bad model, bad request) fails fast, no point retrying.
+      if ((response.status === 503 || response.status === 429) && attempt < MAX_RETRIES) {
+        lastResponse = response;
+        await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt));
+        continue;
+      }
+ 
+      return response;
+    } catch (error) {
+      clearTimeout(timeout);
+      if (attempt < MAX_RETRIES && error instanceof Error && error.name !== "AbortError") {
+        // Network blip - retry. A genuine timeout (AbortError) is not retried
+        // here since REQUEST_TIMEOUT_MS is already generous.
+        await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+ 
+  // Unreachable in practice, but keeps TypeScript happy and is a safe fallback.
+  return lastResponse as Response;
 }
  
 async function complete(request: AiCompletionRequest): Promise<string> {
-  try {
-    return await attemptComplete(request);
-  } catch (error) {
-    if (!isOverloadError(error)) throw error;
-    await sleep(OVERLOAD_RETRY_DELAY_MS);
-    return attemptComplete(request);
-  }
-}
- 
-async function attemptComplete(request: AiCompletionRequest): Promise<string> {
   const apiKey = getApiKey();
   const model = getModel();
   const url = `${API_BASE}/${model}:generateContent`;
  
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: request.systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: request.userPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.7,
+      maxOutputTokens: MAX_OUTPUT_TOKENS[request.responseShape],
+    },
+  });
  
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: request.systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: request.userPrompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.7,
-          maxOutputTokens: MAX_OUTPUT_TOKENS[request.responseShape],
-        },
-      }),
-    });
+    response = await fetchWithRetry(url, apiKey, body);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new AiError("timeout", "The AI provider took too long to respond. Please try again.", {
@@ -163,8 +170,6 @@ async function attemptComplete(request: AiCompletionRequest): Promise<string> {
     throw new AiError("network_error", "Couldn't reach the AI provider. Please try again.", {
       cause: error,
     });
-  } finally {
-    clearTimeout(timeout);
   }
  
   if (response.status === 401 || response.status === 403) {
